@@ -28,6 +28,15 @@ U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
 #define RC522_MISO 35
 #define RC522_RST 45
 
+// ---------- Motor ----------
+#define INA 4
+#define INB 5
+#define EN 6
+constexpr uint8_t MOTOR_PWM_CHANNEL = 0;
+constexpr uint32_t MOTOR_PWM_FREQ = 20000;
+constexpr uint8_t MOTOR_PWM_RESOLUTION = 8;
+
+
 MFRC522 mfrc522(RC522_SS, RC522_RST);
 
 // ---------- WiFi + Server ----------
@@ -63,6 +72,7 @@ char displayUserId[24] = "---";
 // Menu
 const char *optionNames[3] = {"A", "B", "C"};
 const int optionCosts[3] = {10, 20, 30};
+const int optionSpeeds[3] = {120, 170, 255};
 
 // Button tracking
 bool lastCancel = HIGH;
@@ -157,8 +167,25 @@ void beepQuiet(int pulses = 1, int onMs = 20, int offMs = 25)
   }
 }
 
+void stopMotor()
+{
+  ledcWrite(MOTOR_PWM_CHANNEL, 0);
+  digitalWrite(INA, LOW);
+  digitalWrite(INB, LOW);
+}
+
+void runMotorForSelection(int index)
+{
+  int speed = optionSpeeds[index];
+  digitalWrite(INA, HIGH);
+  digitalWrite(INB, LOW);
+  ledcWrite(MOTOR_PWM_CHANNEL, speed);
+  Serial.printf("Motor running option=%s pwm=%d\n", optionNames[index], speed);
+}
+
 void resetToIdle()
 {
+  stopMotor();
   hasCard = false;
   strcpy(displayUserId, "---");
   mockCredit = 0;
@@ -590,6 +617,18 @@ void setup()
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, HIGH);
 
+  // Motor
+  pinMode(INA, OUTPUT);
+  pinMode(INB, OUTPUT);
+  ledcSetup(MOTOR_PWM_CHANNEL, MOTOR_PWM_FREQ, MOTOR_PWM_RESOLUTION);
+  ledcAttachPin(EN, MOTOR_PWM_CHANNEL);
+  stopMotor();
+
+  // digitalWrite(INA, HIGH);
+  // digitalWrite(INB, LOW);
+  // ledcWrite(MOTOR_PWM_CHANNEL, 255);
+  // while(1);
+
   // OLED
   Wire.begin(SDA_PIN, SCL_PIN);
   u8g2.begin();
@@ -748,6 +787,7 @@ void loop()
         mockCredit -= optionCosts[selectedIndex];
         beepQuiet(3, 12, 18);
         runningStartMs = millis();
+        runMotorForSelection(selectedIndex);
         setState(ST_RUNNING);
       }
       else
